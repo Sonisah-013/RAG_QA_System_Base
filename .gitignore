@@ -1,18 +1,5 @@
-﻿# Environment variables / Secrets
-.env
-*.env
-
-# Python / Virtual Environment
-venv/
-.venv/
+﻿venv/
 __pycache__/
 *.pyc
-*.pyo
-*.pyd
-
-# IDE / Editor settings
-.vscode/
-.idea/
-
-# Vectorstore data (optional: ignore local FAISS index outputs)
+.env
 faiss_index/

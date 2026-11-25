@@ -1,60 +1,56 @@
 ﻿"""
 qa_chain.py
-Builds the Retrieval QA chain using LCEL and exposes ask_question(), 
-which returns both the answer and the source chunks used to generate it.
+Builds the Retrieval QA chain (LCEL) with Groq and exposes ask_question(),
+which returns the answer and the source chunks used.
 """
 
 import logging
 import os
-import warnings
 from typing import Any, List, Tuple
 
-# Suppress deprecation warnings from community packages
-warnings.filterwarnings("ignore", category=DeprecationWarning)
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from langchain_classic.chains import create_retrieval_chain
 from langchain_classic.chains.combine_documents import create_stuff_documents_chain
-from langchain_community.vectorstores import FAISS
-from langchain_openai import ChatOpenAI
+from langchain_groq import ChatGroq
 
 from src.generation.prompts import qa_prompt
 from src.retrieval.retriever import get_retriever
 from src.retrieval.vectorstore import load_vectorstore
 
-logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
-LLM_MODEL = "gpt-4o-mini"
-LLM_TEMPERATURE = 0.2
+GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-20b")
+NO_ANSWER_PREFIX = "I don't have enough information"
 
 
-def build_qa_chain(vectorstore: FAISS) -> Any:
-    """Build a modern Retrieval QA chain using LCEL."""
-    api_key = os.getenv("OPENAI_API_KEY")
+def build_qa_chain(vectorstore) -> Any:
+    """Build the retrieval QA chain using Groq."""
+    api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
         raise ValueError(
-            "OPENAI_API_KEY not found in environment. "
-            "Add it to your .env file, e.g. OPENAI_API_KEY=sk-..."
+            "GROQ_API_KEY not found in environment. "
+            "Add it to your .env file, e.g. GROQ_API_KEY=gsk_..."
         )
 
-    llm = ChatOpenAI(model=LLM_MODEL, temperature=LLM_TEMPERATURE, api_key=api_key)
+    llm = ChatGroq(
+        model=GROQ_MODEL,
+        temperature=0.2,
+        max_tokens=1500,
+        api_key=api_key,
+    )
+
     retriever = get_retriever(vectorstore)
-
     combine_docs_chain = create_stuff_documents_chain(llm, qa_prompt)
-    retrieval_chain = create_retrieval_chain(retriever, combine_docs_chain)
-
-    logger.info(f"Built QA chain using model: {LLM_MODEL}")
-    return retrieval_chain
+    chain = create_retrieval_chain(retriever, combine_docs_chain)
+    logger.info(f"QA chain ready (Groq model: {GROQ_MODEL})")
+    return chain
 
 
 def ask_question(chain: Any, question: str) -> Tuple[str, List[str]]:
-    """
-    Run a question through the QA chain.
-
-    Returns:
-        answer: the generated answer string
-        sources: list of short source snippets used to ground the answer
-    """
+    """Run a question through the chain. Returns (answer, sources)."""
     if not question or not question.strip():
         raise ValueError("Question must not be empty")
 
@@ -64,17 +60,26 @@ def ask_question(chain: Any, question: str) -> Tuple[str, List[str]]:
         logger.error(f"QA chain failed: {e}")
         raise
 
-    answer = result["answer"]
-    source_docs = result.get("context", [])
+    answer = result["answer"].strip()
 
-    sources = []
-    for doc in source_docs:
-        page = doc.metadata.get("page", "?")
-        source_name = doc.metadata.get("source", "unknown")
+    # No sources when the model says it couldn't find the answer
+    if answer.startswith(NO_ANSWER_PREFIX):
+        return answer, []
+
+    sources: List[str] = []
+    seen = set()
+    for doc in result.get("context", []):
+        name = doc.metadata.get("source", "unknown")
+        page = doc.metadata.get("page")
+        label = f"{name}, page {page + 1}" if isinstance(page, int) else name
         snippet = doc.page_content[:200].replace("\n", " ").strip()
-        sources.append(f"[{source_name}, page {page}] {snippet}...")
+        key = (label, snippet)
+        if key in seen:
+            continue
+        seen.add(key)
+        sources.append(f"[{label}] {snippet}...")
 
-    logger.info(f"Answered question using {len(sources)} source chunk(s)")
+    logger.info(f"Answered using {len(sources)} source chunk(s)")
     return answer, sources
 
 
@@ -86,8 +91,5 @@ if __name__ == "__main__":
         query = input("\nAsk a question (or 'exit'): ")
         if query.lower() == "exit":
             break
-        ans, srcs = ask_question(qa_chain, query)
+        ans, _ = ask_question(qa_chain, query)
         print(f"\nAnswer: {ans}")
-        print("\nSources:")
-        for s in srcs:
-            print(f"  - {s}")

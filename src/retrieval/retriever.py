@@ -12,7 +12,7 @@ from src.retrieval.vectorstore import load_vectorstore
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
-DEFAULT_TOP_K = 4
+DEFAULT_TOP_K = 10
 
 
 def get_retriever(vectorstore: FAISS = None, k: int = DEFAULT_TOP_K):

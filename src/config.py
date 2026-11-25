@@ -1,38 +1,30 @@
-﻿"""
-config.py
-Central place for pipeline constants. Adjust these instead of hunting
-through every module when you want to tune chunking, models, or paths.
-"""
+﻿"""config.py - single source of truth for pipeline settings."""
 
 import os
 from pathlib import Path
 
 from dotenv import load_dotenv
 
-load_dotenv()  # reads .env into environment variables
+load_dotenv()
 
-# --- Paths ---
-BASE_DIR = Path(__file__).resolve().parent
+# --- Paths (project root = one level above src/) ---
+BASE_DIR = Path(__file__).resolve().parents[1]
 DATA_DIR = BASE_DIR / "data"
 FAISS_INDEX_PATH = BASE_DIR / "faiss_index"
 
-# --- Chunking ---
-CHUNK_SIZE = 1000
-CHUNK_OVERLAP = 150
+# --- Chunking (characters) ---
+CHUNK_SIZE = 800
+CHUNK_OVERLAP = 120
 
 # --- Models ---
-EMBEDDING_MODEL = "text-embedding-3-small"
-LLM_MODEL = "gpt-4o-mini"
+EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+LLM_MODEL = "llama-3.1-8b-instant"   # if you switch to Groq; check current model names
 LLM_TEMPERATURE = 0.2
+LLM_MAX_TOKENS = 512
 
 # --- Retrieval ---
 TOP_K = 4
+SCORE_THRESHOLD = 0.3                # tune on your own documents
 
-# --- API key ---
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-
-if not OPENAI_API_KEY:
-    print(
-        "[WARNING] OPENAI_API_KEY not found in environment. "
-        "Add it to your .env file before running the pipeline."
-    )
+# --- API keys (read lazily where needed, don't warn at import) ---
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
